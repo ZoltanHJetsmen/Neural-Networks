@@ -6,14 +6,17 @@ from sklearn import preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
-#Function that reads and randomize the dataset, returning a namedtuple -> dataset.X and dataset.Y
-def readDataset(filename, y_collumns):
+# Function that reads and randomize the dataset, returning a namedtuple -> dataset.X and dataset.Y
+# Parameters:
+#   filename: file name - string
+#   y_collumns: number of the columns in the end of the file that represent the target variable
+def readDataset(filename, y_columns):
 
     data = pd.read_csv(filename, index_col=False, header=None)
     
-    y = data.iloc[:,len(data.columns)-y_collumns: len(data.columns)]
+    y = data.iloc[:,len(data.columns)-y_columns: len(data.columns)]
     y = np.array(y)
-    X = data.iloc[:,0:len(data.columns)-y_collumns]
+    X = data.iloc[:,0:len(data.columns)-y_columns]
     X = np.array(X)
 
     indices = np.random.choice(len(X), len(X), replace=False)
@@ -125,6 +128,7 @@ def mlp_backward(dataset, j, hidden_weights, output_weights, f_net_o, f_net_h, a
 
     return hidden_weights, output_weights, error 
 
+#Function that calculates the acurracy for classfication and the squared mean error for regression.
 def testing(train, test, hidden_weights, output_weights, method):
 
     if(method == "C"):
@@ -155,6 +159,14 @@ def testing(train, test, hidden_weights, output_weights, method):
         print("Squared mean error: " + str(sum_errors/test.X.shape[0]))
         
 
+# MLP function
+# Parameters:
+#   dataset: dataset read by the readDataset fuction
+#   hidden_layers: number of hidden layers - int
+#   hidden_units: number of hidden units in each hidden layers - int vector
+#   n_classes: number of classes that your dataset has. (Number of neurons in the output layer) - int
+#   alpha: the alpha parameter in the back propagation - float between 0 and 1
+#   method: C for classification and R for for regression - string
 def MLP(dataset, hidden_layers ,hidden_units, n_classes, threshold, alpha, method):
 
     if(len(hidden_units) != hidden_layers):
