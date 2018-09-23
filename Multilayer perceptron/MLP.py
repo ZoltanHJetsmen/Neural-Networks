@@ -6,13 +6,14 @@ from sklearn import preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
-def readDataset(filename):
+#Function that reads and randomize the dataset, returning a namedtuple -> dataset.X and dataset.Y
+def readDataset(filename, y_collumns):
 
     data = pd.read_csv(filename, index_col=False, header=None)
-
-    y = data.iloc[:,len(data.columns)-1]
+    
+    y = data.iloc[:,len(data.columns)-y_collumns: len(data.columns)]
     y = np.array(y)
-    X = data.iloc[:,0:len(data.columns)-1]
+    X = data.iloc[:,0:len(data.columns)-y_collumns]
     X = np.array(X)
 
     indices = np.random.choice(len(X), len(X), replace=False)
@@ -25,24 +26,28 @@ def readDataset(filename):
 
     return d
 
-def processing(dataset, percentage):
+# Function that transform divides the dataset in train and test and transform the Y values in binary, OneHotEnconding
+def processing(dataset, percentage, method):
 
-    scaler = StandardScaler()
-    scaler.fit(dataset.X)
-    x = scaler.transform(dataset.X)
+    if(method == "C"):
+        scaler = StandardScaler()
+        scaler.fit(dataset.X)
+        x = scaler.transform(dataset.X)
+        onehot_encoder = OneHotEncoder(sparse=False)
+        y = dataset.Y.reshape(len(dataset.Y), 1)
+        y = onehot_encoder.fit_transform(y)
+    else:
+        x = dataset.X
+        min_max_scaler = preprocessing.MinMaxScaler()
+        y = min_max_scaler.fit_transform(dataset.Y)
 
-
-    onehot_encoder = OneHotEncoder(sparse=False)
-    y = dataset.Y.reshape(len(dataset.Y), 1)
-    y = onehot_encoder.fit_transform(y)
-    
     lenght = dataset.X.shape[0]
 
     x_train = x[0:int(percentage*lenght), :]
     y_train = y[0:int(percentage*lenght), :]
 
     x_test = x[int(percentage*lenght):, :]
-    y_test = y[0:int(percentage*lenght), :]
+    y_test = y[int(percentage*lenght):, :]
         
     dataset = namedtuple('datset', 'X Y')
 
@@ -52,11 +57,13 @@ def processing(dataset, percentage):
 
     return train, test
 
+# Sigmoid function
 def sigmoid(x):
 
     return 1/(1+np.exp(-x))
 
-def mlp_forward(x, hidden_weights, output_weights):
+# Forward 
+def mlp_forward(x, hidden_weights, output_weights,method):
 
     f_net_h = []
 
@@ -71,11 +78,13 @@ def mlp_forward(x, hidden_weights, output_weights):
         f_net_h.append(f_net) 
 
     net = np.matmul(f_net_h[len(f_net_h)-1],output_weights[:,0:len(f_net_h[len(f_net_h)-1])].transpose()) + output_weights[:,-1]
+        
     f_net_o = sigmoid(net)
-
+    
     return f_net_o, f_net_h
 
-def mlp_backward(dataset, j, hidden_weights, output_weights, f_net_o, f_net_h, alpha, hidden_units, n_classes):
+# Backward
+def mlp_backward(dataset, j, hidden_weights, output_weights, f_net_o, f_net_h, alpha, hidden_units, n_classes, method):
 
     x = dataset.X[j,:]
     y = dataset.Y[j,:]
@@ -116,13 +125,47 @@ def mlp_backward(dataset, j, hidden_weights, output_weights, f_net_o, f_net_h, a
 
     return hidden_weights, output_weights, error 
 
-def MLP(dataset, hidden_layers ,hidden_units, n_classes, threshold, alpha):
+def testing(train, test, hidden_weights, output_weights, method):
 
-    train, test = processing(dataset, 0.7)
+    if(method == "C"):
+        counter = 0
+
+        for i in range(test.X.shape[0]):
+            y_hat, q = mlp_forward(test.X[i,:], hidden_weights, output_weights, method)
+            y_hat = np.argmax(y_hat)
+            y = np.argmax(test.Y[i,:])
+            if y == y_hat:
+                counter += 1
+
+        print("Accuracy: " + str(counter/test.X.shape[0]))
+    
+    else:
+        sum_errors = 0
+        
+        for i in range(train.X.shape[0]):
+            y_hat, q = mlp_forward(train.X[i,:], hidden_weights, output_weights, method)
+            if(i < 10):
+                print(train.Y[i,:])
+                print(y_hat)
+                print()
+            error = train.Y[i,:] - y_hat
+            error = error*error
+            sum_errors += sum(error)
+        
+        print("Squared mean error: " + str(sum_errors/test.X.shape[0]))
+        
+
+def MLP(dataset, hidden_layers ,hidden_units, n_classes, threshold, alpha, method):
 
     if(len(hidden_units) != hidden_layers):
-        print("The parameters hidden_layers and hidden_units must have the same value.")
+        print("The parameter hidden_units must have its length the same value that hidden_layers.")
         return
+
+    if(method != "R" and method != "C"):
+        print("The parameter method must be R (Regression) or C (Classification).")
+        return
+    
+    train, test = processing(dataset, 0.7, method)
 
     hidden_weights = []
 
@@ -155,20 +198,25 @@ def MLP(dataset, hidden_layers ,hidden_units, n_classes, threshold, alpha):
         sum_errors = 0
         for i in range(train.X.shape[0]):
             # Forward
-            f_net_o, f_net_h = mlp_forward(train.X[i, :], hidden_weights, output_weights)
+            f_net_o, f_net_h = mlp_forward(train.X[i, :], hidden_weights, output_weights, method)
             
             # Backward hidden_weights, output_weights, error = 
-            hidden_weights, output_weights, error = mlp_backward(train, i, hidden_weights, output_weights, f_net_o, f_net_h, alpha, hidden_units, n_classes)
+            hidden_weights, output_weights, error = mlp_backward(train, i, hidden_weights, output_weights, f_net_o, f_net_h, alpha, hidden_units, n_classes, method)
 
             sum_errors += error
+    
         epoch += 1
+
+        if method == "R":
+            sum_errors = sum_errors/train.X.shape[0]
         
         if(epoch % 100 == 0):
             print(sum_errors)
 
-    """for i in range(4):
-        y, q = mlp_forward(dataset.X[i,:], hidden_weights, output_weights)
-        print(dataset.X[i,:])
-        print(y)"""
 
-MLP(readDataset("wine.csv"), 3, [5, 3, 6] , 3, 0.01, 0.1)
+    testing(train, test, hidden_weights, output_weights, method)
+
+#MLP(readDataset("wine.csv", 1), 1, [2] , 3, 0.1, 0.1, "C")
+
+MLP(readDataset("default_features_1059_tracks.txt", 2), 1, [30], 2, 0.003, 0.1, "R")
+
